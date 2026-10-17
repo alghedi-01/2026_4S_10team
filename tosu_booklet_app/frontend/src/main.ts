@@ -73,7 +73,8 @@ function renderFormPage() {
         const formData = {
             company_name: (form.elements.namedItem('company_name') as HTMLInputElement).value,
             catchphrase: (form.elements.namedItem('catchphrase') as HTMLInputElement).value,
-            description: (form.elements.namedItem('textarea' as any) || form.elements.namedItem('description') as HTMLTextAreaElement).value,
+            // HTMLTextAreaElement として安全にキャストして .value を取得する
+            description: (form.elements.namedItem('description') as HTMLTextAreaElement).value,
             contact: (form.elements.namedItem('contact') as HTMLInputElement).value,
         };
 
