@@ -5,6 +5,7 @@ from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
+#pythonのwebフレームワークでありflaskの起動
 app = Flask(__name__)
 
 # 保存フォルダの定義
@@ -232,18 +233,19 @@ ADMIN_TEMPLATE = """
 </body>
 </html>
 """
-
+#トップ画面の処理
 @app.route('/')
 def index():
     files = os.listdir(PDF_DIR)
     pdf_files = [f for f in files if f.endswith('.pdf')]
     return render_template_string(INDEX_TEMPLATE, files=pdf_files)
 
-@app.route('/form')
+#企業向けデータ入力・確認の処理
+@app.route('/form')#企業が入力するフォーム画面の表示
 def form_page():
     return render_template_string(FORM_TEMPLATE)
 
-@app.route('/confirm', methods=['POST'])
+@app.route('/confirm', methods=['POST'])#入力されたデータの確認画面を作る
 def confirm_page():
     return render_template_string(
         CONFIRM_TEMPLATE,
@@ -253,7 +255,7 @@ def confirm_page():
         contact=request.form.get('contact')
     )
 
-@app.route('/submit-to-admin', methods=['POST'])
+@app.route('/submit-to-admin', methods=['POST'])#市役所へのアップロード申請の処理
 def submit_to_admin():
     company_name = request.form.get('company_name')
     catchphrase = request.form.get('catchphrase')
@@ -305,6 +307,7 @@ def submit_to_admin():
     </html>
     """)
 
+#市役所の管理者画面の処理
 @app.route('/admin')
 def admin_page():
     files = os.listdir(PENDING_DIR)
@@ -323,7 +326,7 @@ def admin_page():
 def admin_view_pdf(filename):
     return send_from_directory(PENDING_DIR, filename)
 
-@app.route('/admin/approve', methods=['POST'])
+@app.route('/admin/approve', methods=['POST'])#証人と公開ボタンを押すと公開用フォルダに移動する
 def admin_approve():
     filename = request.form.get('filename')
     src_path = os.path.join(PENDING_DIR, filename)
@@ -338,7 +341,7 @@ def admin_approve():
         
     return redirect(url_for('admin_page'))
 
-@app.route('/admin/reject', methods=['POST'])
+@app.route('/admin/reject', methods=['POST'])#却下したときは申請データの削除を行う
 def admin_reject():
     filename = request.form.get('filename')
     target_path = os.path.join(PENDING_DIR, filename)
@@ -346,7 +349,7 @@ def admin_reject():
         os.remove(target_path)
     return redirect(url_for('admin_page'))
 
-@app.route('/view/<filename>')
+@app.route('/view/<filename>')#ブラウザでのpdf閲覧処理
 def view_pdf(filename):
     return send_from_directory(PDF_DIR, filename)
 
