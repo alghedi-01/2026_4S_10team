@@ -7,10 +7,13 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 app = Flask(__name__)
 
-PDF_DIR = os.path.join(os.path.dirname(__file__), 'generated_pdfs')
+# 保存フォルダの定義
+PDF_DIR = os.path.join(os.path.dirname(__file__), 'generated_pdfs')          # 最終的に高校生が見る公開用PDF
+PENDING_DIR = os.path.join(os.path.dirname(__file__), 'pending_requests')    # 市役所の承認待ちデータ保存用
 os.makedirs(PDF_DIR, exist_ok=True)
+os.makedirs(PENDING_DIR, exist_ok=True)
 
-# 1. 【トップ画面】高校生向け：生成済み企業PDF一覧・閲覧ページ
+# 1. 【トップ画面】高校生向け：公開済み企業PDF一覧
 INDEX_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ja">
@@ -22,8 +25,11 @@ INDEX_TEMPLATE = """
         .container { max-width: 700px; margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         h2 { color: #0056b3; border-bottom: 2px solid #0056b3; padding-bottom: 8px; }
         .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .admin-btn { background-color: #28a745; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; font-size: 14px; }
-        .admin-btn:hover { background-color: #218838; }
+        .nav-btns { display: flex; gap: 10px; }
+        .btn-form { background-color: #007bff; color: white; padding: 8px 14px; border-radius: 4px; text-decoration: none; font-size: 13px; }
+        .btn-form:hover { background-color: #0056b3; }
+        .btn-admin { background-color: #dc3545; color: white; padding: 8px 14px; border-radius: 4px; text-decoration: none; font-size: 13px; }
+        .btn-admin:hover { background-color: #c82333; }
         ul { padding-left: 20px; }
         li { margin-bottom: 12px; font-size: 16px; }
         a.pdf-link { color: #007bff; text-decoration: none; font-weight: bold; }
@@ -34,11 +40,14 @@ INDEX_TEMPLATE = """
 <body>
     <div class="container">
         <div class="header-bar">
-            <h2>📖 鳥栖市 企業紹介冊子（高校生向け閲覧ページ）</h2>
-            <a href="/form" class="admin-btn">企業向け入力フォームへ ➔</a>
+            <h2>📖 鳥栖市 企業紹介冊子（高校生向け閲覧）</h2>
+            <div class="nav-btns">
+                <a href="/form" class="btn-form">企業向け入力 ➔</a>
+                <a href="/admin" class="btn-admin">市役所管理画面 🔒</a>
+            </div>
         </div>
         
-        <p>以下の企業名をクリックすると、各社の紹介PDFをブラウザで閲覧・ダウンロードできます。</p>
+        <p>以下の企業名をクリックすると、各社の紹介PDFを閲覧・ダウンロードできます。</p>
         
         {% if files %}
             <ul>
@@ -49,14 +58,14 @@ INDEX_TEMPLATE = """
                 {% endfor %}
             </ul>
         {% else %}
-            <p class="no-data">現在、公開されている企業紹介PDFはありません。（企業フォームから情報を登録してください）</p>
+            <p class="no-data">現在、公開されている企業紹介PDFはありません。</p>
         {% endif %}
     </div>
 </body>
 </html>
 """
 
-# 2. 【サブ画面】企業向け：データ入力フォーム
+# 2. 【企業向け】情報入力フォーム
 FORM_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ja">
@@ -80,7 +89,6 @@ FORM_TEMPLATE = """
 <body>
     <div class="container">
         <h2>企業紹介データ 入力フォーム</h2>
-        <!-- 確認画面（/confirm）へデータをPOSTする -->
         <form method="POST" action="/confirm">
             <label>企業名：</label>
             <input type="text" name="company_name" required placeholder="例：株式会社 鳥栖テクノロジー">
@@ -104,7 +112,7 @@ FORM_TEMPLATE = """
 </html>
 """
 
-# 3. 【新設】入力内容の確認画面
+# 3. 【企業向け】入力内容の確認画面
 CONFIRM_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ja">
@@ -129,39 +137,97 @@ CONFIRM_TEMPLATE = """
 <body>
     <div class="container">
         <h2>入力内容の確認</h2>
-        <p>以下の内容で間違いがなければ、「この内容でPDFを生成・公開する」ボタンを押してください。</p>
+        <p>内容に間違いがなければ、「市役所にアップロード申請をする」ボタンを押してください。</p>
         
         <div class="info-box">
-            <div class="info-item">
-                <div class="label">企業名：</div>
-                <div class="value">{{ company_name }}</div>
-            </div>
-            <div class="info-item">
-                <div class="label">キャッチコピー：</div>
-                <div class="value">{{ catchphrase }}</div>
-            </div>
-            <div class="info-item">
-                <div class="label">企業PR・事業内容：</div>
-                <div class="value">{{ description }}</div>
-            </div>
-            <div class="info-item">
-                <div class="label">担当者連絡先：</div>
-                <div class="value">{{ contact }}</div>
-            </div>
+            <div class="info-item"><div class="label">企業名：</div><div class="value">{{ company_name }}</div></div>
+            <div class="info-item"><div class="label">キャッチコピー：</div><div class="value">{{ catchphrase }}</div></div>
+            <div class="info-item"><div class="label">企業PR・事業内容：</div><div class="value">{{ description }}</div></div>
+            <div class="info-item"><div class="label">担当者連絡先：</div><div class="value">{{ contact }}</div></div>
         </div>
 
-        <!-- 実際にPDF生成を行う /generate-pdf にデータを引き継いで送るフォーム -->
-        <form method="POST" action="/generate-pdf">
+        <form method="POST" action="/submit-to-admin">
             <input type="hidden" name="company_name" value="{{ company_name }}">
             <input type="hidden" name="catchphrase" value="{{ catchphrase }}">
             <input type="hidden" name="description" value="{{ description }}">
             <input type="hidden" name="contact" value="{{ contact }}">
             
             <div class="btn-group">
-                <button type="submit">この内容でPDFを生成・公開する</button>
-                <a href="/form" class="back-btn">入力画面に戻って修正する</a>
+                <button type="submit">市役所にアップロード申請をする</button>
+                <a href="/form" class="back-btn">修正する</a>
             </div>
         </form>
+    </div>
+</body>
+</html>
+"""
+
+# 4. 【市役所向け】承認待ち一覧・管理画面（PDFプレビューボタン付き）
+ADMIN_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>市役所管理画面 - アップロード承認</title>
+    <style>
+        body { font-family: sans-serif; margin: 40px; background-color: #f4f4f9; color: #333; }
+        .container { max-width: 850px; margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h2 { color: #dc3545; border-bottom: 2px solid #dc3545; padding-bottom: 8px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #dee2e6; padding: 12px; text-align: left; vertical-align: middle; }
+        th { background-color: #f8f9fa; }
+        .btn-preview { background-color: #17a2b8; color: white; padding: 6px 10px; border-radius: 4px; text-decoration: none; font-size: 13px; display: inline-block; margin-bottom: 5px; }
+        .btn-preview:hover { background-color: #138496; }
+        .btn-approve { background-color: #28a745; color: white; padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; display: inline-block; }
+        .btn-approve:hover { background-color: #218838; }
+        .btn-reject { background-color: #dc3545; color: white; padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; }
+        .btn-reject:hover { background-color: #c82333; }
+        .action-group { display: flex; gap: 5px; align-items: center; }
+        .back-link { display: inline-block; margin-top: 20px; color: #6c757d; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+        .no-data { color: #777; font-style: italic; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🔒 市役所管理者ページ（承認待ち一覧）</h2>
+        <p>申請されたPDFの内容を「PDFプレビュー」で確認し、問題なければ承認してください。</p>
+        
+        {% if items %}
+            <table>
+                <tr>
+                    <th>企業名</th>
+                    <th>確認用PDF</th>
+                    <th>アクション</th>
+                </tr>
+                {% for item in items %}
+                <tr>
+                    <td><strong>{{ item.company_name }}</strong></td>
+                    <td>
+                        <!-- 市役所が申請中のPDFをブラウザでプレビューするためのリンク -->
+                        <a href="/admin/view/{{ item.filename }}" target="_blank" class="btn-preview">🔍 PDFプレビュー</a>
+                    </td>
+                    <td>
+                        <div class="action-group">
+                            <form method="POST" action="/admin/approve" style="display:inline;">
+                                <input type="hidden" name="filename" value="{{ item.filename }}">
+                                <button type="submit" class="btn-approve">承認して公開</button>
+                            </form>
+                            <form method="POST" action="/admin/reject" style="display:inline;">
+                                <input type="hidden" name="filename" value="{{ item.filename }}">
+                                <button type="submit" class="btn-reject" onclick="return confirm('本当に却下しますか？');">却下</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+        {% else %}
+            <p class="no-data">現在、承認待ちの企業申請はありません。</p>
+        {% endif %}
+        
+        <br>
+        <a href="/" class="back-link">← 高校生向け閲覧ページに戻る</a>
     </div>
 </body>
 </html>
@@ -179,48 +245,38 @@ def form_page():
 
 @app.route('/confirm', methods=['POST'])
 def confirm_page():
-    # フォームから受け取ったデータをそのまま確認画面テンプレートに渡す
-    company_name = request.form.get('company_name')
-    catchphrase = request.form.get('catchphrase')
-    description = request.form.get('description')
-    contact = request.form.get('contact')
-    
     return render_template_string(
         CONFIRM_TEMPLATE,
-        company_name=company_name,
-        catchphrase=catchphrase,
-        description=description,
-        contact=contact
+        company_name=request.form.get('company_name'),
+        catchphrase=request.form.get('catchphrase'),
+        description=request.form.get('description'),
+        contact=request.form.get('contact')
     )
 
-@app.route('/generate-pdf', methods=['POST'])
-def generate_pdf():
+@app.route('/submit-to-admin', methods=['POST'])
+def submit_to_admin():
     company_name = request.form.get('company_name')
     catchphrase = request.form.get('catchphrase')
     description = request.form.get('description')
     contact = request.form.get('contact')
 
     filename = f"{company_name}_紹介シート.pdf"
-    filepath = os.path.join(PDF_DIR, filename)
+    filepath = os.path.join(PENDING_DIR, filename)
     
-    # ReportLabでA4サイズのPDFを生成して保存
+    # 承認待ちフォルダにPDFを生成
     c = canvas.Canvas(filepath, pagesize=A4)
     width, height = A4
-
     font_path = "C:/Windows/Fonts/meiryo.ttc"
     pdfmetrics.registerFont(TTFont('Meiryo', font_path))
 
     c.setFont("Meiryo", 20)
     c.drawString(50, height - 60, company_name)
-
     c.setFont("Meiryo", 12)
     c.setFillColorRGB(0.3, 0.3, 0.3)
     c.drawString(50, height - 90, f"「 {catchphrase} 」")
-
     c.setStrokeColorRGB(0, 0.33, 0.7)
     c.setLineWidth(2)
     c.line(50, height - 105, width - 50, height - 105)
-
     c.setFont("Meiryo", 14)
     c.setFillColorRGB(0, 0, 0)
     c.drawString(50, height - 140, "【 企業PR・事業内容 】")
@@ -231,15 +287,64 @@ def generate_pdf():
         text_y -= 20
 
     c.drawString(50, text_y - 20, f"【 お問合せ先 】 {contact}")
-
     c.setFont("Meiryo", 9)
     c.setFillColorRGB(0.5, 0.5, 0.5)
-    c.drawString(50, 40, "鳥栖市 高校生向け企業紹介冊子")
-
+    c.drawString(50, 40, "鳥栖市 高校生向け企業紹介冊子（承認待ちデータ）")
     c.showPage()
     c.save()
 
-    return redirect(url_for('index'))
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html lang="ja">
+    <head><meta charset="UTF-8"><title>申請完了</title></head>
+    <body style="font-family:sans-serif; text-align:center; margin-top:100px;">
+        <h2>🎉 市役소へのアップロード申請が完了しました！</h2>
+        <p>担当者による確認・承認が行われた後、高校生向けのページに公開されます。</p>
+        <br><a href="/" style="color:#007bff; text-decoration:none;">トップページ（閲覧ページ）に戻る</a>
+    </body>
+    </html>
+    """)
+
+@app.route('/admin')
+def admin_page():
+    files = os.listdir(PENDING_DIR)
+    items = []
+    for f in files:
+        if f.endswith('.pdf'):
+            comp_name = f.replace('_紹介シート.pdf', '')
+            items.append({
+                'filename': f,
+                'company_name': comp_name
+            })
+    return render_template_string(ADMIN_TEMPLATE, items=items)
+
+# 【追加】市役所管理画面から承認待ちPDFをプレビュー表示するためのルート
+@app.route('/admin/view/<filename>')
+def admin_view_pdf(filename):
+    return send_from_directory(PENDING_DIR, filename)
+
+@app.route('/admin/approve', methods=['POST'])
+def admin_approve():
+    filename = request.form.get('filename')
+    src_path = os.path.join(PENDING_DIR, filename)
+    dst_path = os.path.join(PDF_DIR, filename)
+    
+    if os.path.exists(src_path):
+        with open(src_path, 'rb') as src:
+            content = src.read()
+        with open(dst_path, 'wb') as dst:
+            dst.write(content)
+        os.remove(src_path)
+        
+    return redirect(url_for('admin_page'))
+
+@app.route('/admin/reject', methods=['POST'])
+def admin_reject():
+    filename = request.form.get('filename')
+    target_path = os.path.join(PENDING_DIR, filename)
+    if os.path.exists(target_path):
+        os.remove(target_path)
+    return redirect(url_for('admin_page'))
 
 @app.route('/view/<filename>')
 def view_pdf(filename):
