@@ -17,14 +17,14 @@ os.makedirs(PENDING_DIR, exist_ok=True)
 
 # 1. 【API】公開済みPDFの一覧を返すエンドポイント
 @app.route('/api/public-pdfs', methods=['GET'])
-def get_public_pdfs():
+def get_public_pdfs():#公開済みPDFの一覧を取得し、JSONで返す
     files = os.listdir(PDF_DIR)
     pdf_files = [f for f in files if f.endswith('.pdf')]
     return jsonify({'status': 'success', 'files': pdf_files})
 
 # 2. 【API】企業からのデータを受け取り、承認待ちPDFを仮生成するエンドポイント
 @app.route('/api/submit', methods=['POST'])
-def submit_data():
+def submit_data():#企業からの入力を受け取り、ReportLabでPDFを仮生成
     data = request.json
     company_name = data.get('company_name')
     catchphrase = data.get('catchphrase')
@@ -71,7 +71,7 @@ def submit_data():
 
 # 3. 【API】市役所の管理者向け：承認待ち一覧を返す
 @app.route('/api/admin/pending', methods=['GET'])
-def get_pending_requests():
+def get_pending_requests():#市役所向けに承認待ちのPDFファイル一覧を返す
     files = os.listdir(PENDING_DIR)
     items = []
     for f in files:
@@ -85,7 +85,7 @@ def get_pending_requests():
 
 # 4. 【API】市役所による承認処理（承認待ち ➔ 公開用へ移動）
 @app.route('/api/admin/approve', methods=['POST'])
-def admin_approve():
+def admin_approve():#承認待ちPDFを公開用フォルダへ移動し、公開する
     data = request.json
     filename = data.get('filename')
     src_path = os.path.join(PENDING_DIR, filename)
@@ -103,7 +103,7 @@ def admin_approve():
 
 # 5. 【API】市役所による却下処理
 @app.route('/api/admin/reject', methods=['POST'])
-def admin_reject():
+def admin_reject():#承認待ちPDFファイルを削除(却下)する
     data = request.json
     filename = data.get('filename')
     target_path = os.path.join(PENDING_DIR, filename)
